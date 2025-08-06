@@ -2,7 +2,7 @@ import streamlit as st
 from fpdf import FPDF
 from datetime import datetime
 
-# --- Helper function to calculate price per sq. ft based on area ---
+# --- Helper function to get base price ---
 def get_price_per_sqft(area):
     price_map = {
         "Vavol": 3200,
@@ -17,7 +17,7 @@ def get_price_per_sqft(area):
     }
     return price_map.get(area, 3500)
 
-# --- Calculate adjusted price based on amenities ---
+# --- Price adjustment based on features ---
 def adjust_price(base_price, furnishing, overlooking, amenities, property_age):
     price = base_price
 
@@ -47,7 +47,7 @@ def adjust_price(base_price, furnishing, overlooking, amenities, property_age):
 
     return price
 
-# --- PDF Generation ---
+# --- PDF generation ---
 def generate_pdf(name, contact, area, bhk, size, price, price_low, price_high):
     pdf = FPDF()
     pdf.add_page()
@@ -55,52 +55,54 @@ def generate_pdf(name, contact, area, bhk, size, price, price_low, price_high):
     pdf.cell(0, 10, "Property Valuation Report", ln=True)
 
     pdf.set_font("Arial", "", 12)
-    pdf.cell(0, 10, "Valuation Powered by ClearDeals – Gandhinagar", ln=True)
-    pdf.cell(0, 10, f"Name: {name}", ln=True)
+    pdf.cell(0, 10, "Valuation Powered by ClearDeals - Gandhinagar", ln=True)
+    pdf.ln(10)
+    pdf.cell(0, 10, f"Client Name: {name}", ln=True)
     pdf.cell(0, 10, f"Contact: {contact}", ln=True)
     pdf.cell(0, 10, f"Area: {area}", ln=True)
-    pdf.cell(0, 10, f"Property Type: {bhk}", ln=True)
+    pdf.cell(0, 10, f"BHK: {bhk}", ln=True)
     pdf.cell(0, 10, f"Size: {size} sq. ft", ln=True)
-    pdf.cell(0, 10, f"Estimated Price: ₹{price:,.0f}", ln=True)
-    pdf.cell(0, 10, f"Price Range: ₹{price_low:,.0f} - ₹{price_high:,.0f}", ln=True)
+    pdf.cell(0, 10, f"Estimated Price: ₹{price}/sq.ft", ln=True)
+    pdf.cell(0, 10, f"Estimated Total: ₹{price * size:,}", ln=True)
+    pdf.cell(0, 10, f"Price Range: ₹{price_low * size:,} - ₹{price_high * size:,}", ln=True)
 
-    filename = f"valuation_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    pdf.ln(20)
+    pdf.set_font("Arial", "I", 11)
+    pdf.cell(0, 10, "Created by:", ln=True)
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 8, "Nirmal Chauhan", ln=True)
+    pdf.cell(0, 8, "Head of Gandhinagar", ln=True)
+    pdf.cell(0, 8, "Phone: 6356190197", ln=True)
+
+    filename = f"valuation_{datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
     pdf.output(filename)
     return filename
 
-# --- Streamlit App ---
-st.set_page_config(page_title="ClearDeals Property Valuation", layout="centered")
-st.title("🏠 Gandhinagar Property Valuation Tool")
+# --- Streamlit UI ---
+st.title("ClearDeals Property Valuation Tool – Gandhinagar")
 
 with st.form("valuation_form"):
-    name = st.text_input("Your Name")
+    name = st.text_input("Client Name")
     contact = st.text_input("Contact Number")
-    area = st.selectbox("Select Area", [
-        "Vavol", "Pethapur", "Kalol", "Randesan", "Randheja", "Koba", "Gift City", "Bhat", "Sughad"
-    ])
-    bhk = st.selectbox("Property Type", ["1 BHK", "2 BHK", "3 BHK", "Villa", "Plot/Land", "Commercial Shop"])
-    size = st.number_input("Property Size (sq. ft)", min_value=100)
-
-    furnishing = st.selectbox("Furnishing", ["Furnished", "Unfurnished"])
+    area = st.selectbox("Area", ["Vavol", "Pethapur", "Kalol", "Randesan", "Randheja", "Koba", "Gift City", "Bhat", "Sughad"])
+    bhk = st.selectbox("BHK", ["1 BHK", "2 BHK", "3 BHK", "Villa", "Commercial", "Plot"])
+    size = st.number_input("Size (sq. ft)", min_value=100)
+    furnishing = st.selectbox("Furnishing", ["Unfurnished", "Furnished"])
     overlooking = st.selectbox("Overlooking", ["None", "Garden", "Main road"])
     property_age = st.selectbox("Property Age", ["0-5 years", "5-10 years", "10+ years"])
-
-    amenities = st.multiselect(
-        "Other Amenities",
-        ["Swimming Pool", "Garden", "Club house", "Covered Parking", "Security"]
-    )
+    amenities = st.multiselect("Amenities", ["Swimming Pool", "Garden", "Club house", "Covered Parking", "Security"])
 
     submitted = st.form_submit_button("Generate Valuation Report")
 
     if submitted:
         base_price = get_price_per_sqft(area)
-        final_price_per_sqft = adjust_price(base_price, furnishing, overlooking, amenities, property_age)
-        total_price = final_price_per_sqft * size
-        price_low = total_price * 0.95
-        price_high = total_price * 1.05
+        adjusted_price = adjust_price(base_price, furnishing, overlooking, amenities, property_age)
 
-        pdf_file = generate_pdf(name, contact, area, bhk, size, total_price, price_low, price_high)
+        price_low = int(adjusted_price * 0.95)
+        price_high = int(adjusted_price * 1.05)
+
+        pdf_file = generate_pdf(name, contact, area, bhk, size, adjusted_price, price_low, price_high)
+        st.success("✅ Report Generated Successfully!")
 
         with open(pdf_file, "rb") as f:
-            st.success(f"📄 Report Generated! Estimated price ₹{int(total_price):,}")
-            st.download_button("⬇️ Download PDF Report", f, file_name=pdf_file, mime='application/pdf')
+            st.download_button("Download Valuation Report PDF", f, file_name=pdf_file, mime="application/pdf")
