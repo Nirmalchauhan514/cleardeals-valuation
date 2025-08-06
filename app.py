@@ -52,7 +52,7 @@ def generate_pdf(name, contact, area, bhk, size, price, price_low, price_high):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, "🏠 Property Valuation Report", ln=True)
+    pdf.cell(0, 10, "Property Valuation Report", ln=True)
 
     pdf.set_font("Arial", "", 12)
     pdf.cell(0, 10, "Valuation Powered by ClearDeals – Gandhinagar", ln=True)
