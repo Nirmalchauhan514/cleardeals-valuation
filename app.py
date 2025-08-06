@@ -1,57 +1,124 @@
+# app.py - ClearDeals Gandhinagar Property Valuation Tool
+
 import streamlit as st
+from fpdf import FPDF
 import pandas as pd
-from docx import Document
-from datetime import date
+import os
+from datetime import datetime
 
-st.set_page_config(page_title="ClearDeals Valuation Tool", layout="centered")
+# Logo path
+LOGO_PATH = "cleardeal_logo_converted.png"
 
-st.title("🏡 ClearDeals - Gandhinagar Property Valuation Tool")
-st.write("Generate instant property valuation report based on current market prices in Gandhinagar.")
+# CSV for storing leads
+LEADS_CSV = "leads_data.csv"
 
-# --- Area & Property Price Map (Customizable as per market)
-price_data = {
-    "Kudasan": {"1 BHK Flat": 3900, "2 BHK Flat": 4200, "3 BHK Flat": 4500, "Villa": 6000, "Shop": 11000},
-    "Sargasan": {"1 BHK Flat": 3800, "2 BHK Flat": 4000, "3 BHK Flat": 4300, "Villa": 5800, "Shop": 10000},
-    "Raysan": {"1 BHK Flat": 3600, "2 BHK Flat": 3900, "3 BHK Flat": 4200, "Villa": 5500, "Shop": 9500},
-    "PDPU Road": {"2 BHK Flat": 4000, "3 BHK Flat": 4300, "Villa": 5900, "Shop": 9800},
-    "Zundal": {"2 BHK Flat": 3900, "3 BHK Flat": 4200, "Villa": 5600, "Shop": 9200},
+# Area-wise base pricing (₹ per sq.ft.)
+PRICE_MAP = {
+    "Vavol": 3300,
+    "Pethapur": 3000,
+    "Kalol": 2700,
+    "Randesan": 3400,
+    "Randheja": 2900,
+    "Koba": 3600,
+    "Gift City": 7000,
+    "Bhat": 3100,
+    "Sughad": 3200
 }
 
-areas = list(price_data.keys())
+# Amenities impact on pricing (in %)
+AMENITY_IMPACT = {
+    "Furnished": 0.05,
+    "Unfurnished": 0.0,
+    "Garden View": 0.02,
+    "Main Road View": 0.01,
+    "Swimming Pool": 0.03,
+    "Club House": 0.02,
+    "Covered Parking": 0.015,
+    "Security": 0.01
+}
 
-# --- Form
+# Title and logo
+st.set_page_config(page_title="ClearDeals Gandhinagar Valuation", layout="centered")
+st.image(LOGO_PATH, width=180)
+st.title("🏠 Gandhinagar Property Valuation Tool")
+st.caption("Valuation powered by ClearDeals – Gandhinagar")
+
+st.markdown("---")
+
 with st.form("valuation_form"):
-    area = st.selectbox("Select Area", areas)
-    property_type = st.selectbox("Select Property Type", list(price_data[area].keys()))
-    size = st.number_input("Enter Property Size (sq.ft)", min_value=200, step=50)
-    owner_name = st.text_input("Owner's Name")
-    mobile = st.text_input("Contact Number")
-    submitted = st.form_submit_button("Generate Valuation Report")
+    st.subheader("📋 Enter Property Details")
 
-# --- Valuation Logic
-if submitted:
-    rate = price_data[area][property_type]
-    est_price = size * rate
+    name = st.text_input("Your Name")
+    phone = st.text_input("Mobile Number")
 
-    st.success(f"✅ Estimated Value: ₹ {est_price:,.0f}")
-    st.write("You can now download your valuation report.")
+    area = st.selectbox("Select Area", list(PRICE_MAP.keys()))
+    property_type = st.selectbox("Property Type", ["1 BHK Flat", "2 BHK Flat", "3 BHK Flat", "Villa", "Commercial Shop", "Plot/Land"])
+    sq_ft = st.number_input("Total Area (Sq. Ft.)", min_value=100)
+    age = st.selectbox("Age of Property", ["New (0-3 yrs)", "4-7 yrs", "8+ yrs"])
 
-    # --- Generate Word Report
-    doc = Document()
-    doc.add_heading('ClearDeals Property Valuation Report', 0)
-    doc.add_paragraph(f"📅 Date: {date.today().strftime('%d-%m-%Y')}")
-    doc.add_paragraph(f"👤 Owner Name: {owner_name}")
-    doc.add_paragraph(f"📞 Contact: {mobile}")
-    doc.add_paragraph(f"📍 Area: {area}")
-    doc.add_paragraph(f"🏠 Property Type: {property_type}")
-    doc.add_paragraph(f"📐 Size: {size} sq.ft")
-    doc.add_paragraph(f"💰 Market Rate: ₹{rate}/sq.ft")
-    doc.add_paragraph(f"🔎 Estimated Valuation: ₹ {est_price:,.0f}")
-    doc.add_paragraph("\nThank you for using ClearDeals Gandhinagar Tool.")
+    furnishing = st.radio("Furnishing", ["Furnished", "Unfurnished"])
+    view = st.radio("Overlooking", ["Garden View", "Main Road View"])
+    amenities = st.multiselect("Other Amenities", ["Swimming Pool", "Club House", "Covered Parking", "Security"])
 
-    filename = f"valuation_{owner_name.replace(' ', '_')}.docx"
-    doc.save(filename)
+    submit = st.form_submit_button("Get Valuation Report")
 
-    with open(filename, "rb") as f:
-        st.download_button("📥 Download Word Report", f, file_name=filename)
+if submit:
+    base_price = PRICE_MAP.get(area, 3000)
+    multiplier = 1.0 + AMENITY_IMPACT.get(furnishing, 0) + AMENITY_IMPACT.get(view, 0)
+    for am in amenities:
+        multiplier += AMENITY_IMPACT.get(am, 0)
 
+    final_price_per_sqft = base_price * multiplier
+    total_value = final_price_per_sqft * sq_ft
+    low_range = total_value * 0.95
+    high_range = total_value * 1.05
+
+    # Save lead
+    lead_data = pd.DataFrame([[datetime.now(), name, phone, area, property_type, sq_ft, int(total_value)]],
+                             columns=["Timestamp", "Name", "Phone", "Area", "Property Type", "Sq. Ft.", "Estimated Value"])
+
+    if os.path.exists(LEADS_CSV):
+        lead_data.to_csv(LEADS_CSV, mode='a', header=False, index=False)
+    else:
+        lead_data.to_csv(LEADS_CSV, index=False)
+
+    # Show result
+    st.success("✅ Valuation Complete!")
+    st.write(f"**Estimated Value:** ₹{int(total_value):,} ({int(low_range):,} – {int(high_range):,})")
+
+    # Create downloadable PDF
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+
+    if os.path.exists(LOGO_PATH):
+        pdf.image(LOGO_PATH, x=10, y=8, w=40)
+    pdf.ln(25)
+    pdf.cell(200, 10, txt="Property Valuation Report", ln=True, align="C")
+    pdf.ln(10)
+
+    lines = [
+        f"Name: {name}",
+        f"Mobile: {phone}",
+        f"Area: {area}",
+        f"Property Type: {property_type}",
+        f"Size: {sq_ft} sq.ft.",
+        f"Furnishing: {furnishing}",
+        f"Overlooking: {view}",
+        f"Amenities: {', '.join(amenities) if amenities else 'None'}",
+        f"Age of Property: {age}",
+        "-----------------------------------",
+        f"Estimated Price: ₹{int(total_value):,}",
+        f"Price Range: ₹{int(low_range):,} – ₹{int(high_range):,}"
+    ]
+    for line in lines:
+        pdf.cell(200, 10, txt=line, ln=True)
+
+    output_pdf_path = f"valuation_{name.replace(' ', '_')}.pdf"
+    pdf.output(output_pdf_path)
+
+    with open(output_pdf_path, "rb") as f:
+        st.download_button(label="📥 Download Valuation PDF",
+                           data=f,
+                           file_name=output_pdf_path,
+                           mime="application/pdf")
